@@ -1,57 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Beanbird Cursor Tool</title>
-    <script src="webostvjs/webostv.js"></script>
+    <title>Beanbird Bootstrapper</title>
     <style>
-        body { background: #1a1a1a; color: white; text-align: center; padding-top: 10%; font-family: sans-serif; }
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; padding-top: 50px; }
         .button { 
-            padding: 20px; width: 350px; margin: 10px; font-size: 1.5rem; 
-            background: #444; border: none; color: white; border-radius: 10px;
+            padding: 20px; width: 300px; margin: 10px; font-size: 1.2rem; 
+            background: #444; border: 2px solid transparent; color: white; border-radius: 10px;
         }
-        .button:focus { background: #cf0652; outline: 3px solid white; }
-        .warn { color: #ffcc00; font-weight: bold; margin-top: 20px; }
+        .button:focus { background: #cf0652; border-color: white; outline: none; }
+        #log { 
+            background: #000; color: #00ff00; padding: 15px; margin: 20px auto;
+            width: 80%; height: 150px; overflow-y: auto; text-align: left; font-family: monospace;
+        }
+        .warn { color: #ffcc00; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>Beanbird Cursor Manager</h1>
-    
-    <button id="btn-run" class="button">Return Beanbird Cursor</button>
+    <h1>Beanbird Cursor Injector</h1>
+    <button id="btn-beanbird" class="button">Return Beanbird Cursor</button>
     <button id="btn-reboot" class="button">Reset to Default</button>
 
-    <p class="warn">Note: TV will be blackscreen while setting cursor to beanbird cursor for around 10 seconds.</p>
-    <div id="status">Status: Ready</div>
+    <p class="warn">Note: TV will be blackscreen while setting cursor for around 10-20 seconds.</p>
+    
+    <div id="log">Status: Waiting for user...</div>
+
+    <script src="webostvjs/webostv.js"></script>
 
     <script>
-        const status = document.getElementById('status');
-        // Update this path to where your scripts are stored on the TV
-        const scriptPath = "/media/developer/apps/usr/palm/applications/com.your.app.id";
+        const logBox = document.getElementById('log');
+        const APP_ID = "com.your.app.id"; // UPDATE THIS to your actual app ID
+        const SCRIPT_PATH = `/media/developer/apps/usr/palm/applications/${APP_ID}/beanbird.sh`;
 
-        function runScript(fileName) {
-            status.innerText = "Status: Running " + fileName + "...";
+        function log(msg) {
+            logBox.innerText += "\n> " + msg;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        // 1. Function to execute the shell script
+        function executeBeanbird() {
+            log("Attempting to trigger beanbird.sh...");
             
-            // Using the Homebrew Channel service to execute the shell file
+            // We use the Luna service provided by the Homebrew Channel
             webOS.service.request("luna://org.webosbrew.hbchannel.service", {
                 method: "exec",
-                parameters: { "command": "sh " + scriptPath + "/" + fileName },
-                onSuccess: (res) => { status.innerText = "Status: Success"; },
-                onFailure: (res) => { status.innerText = "Status: Failed - " + res.errorText; }
+                parameters: { "command": `sh ${SCRIPT_PATH}` },
+                onSuccess: function(res) {
+                    log("Script triggered! Beanbird cursor set.");
+                    log("Wait 10-20 seconds for the UI to restart...");
+                },
+                onFailure: function(res) {
+                    log("Error: " + res.errorText);
+                }
             });
         }
 
-        document.getElementById('btn-run').addEventListener('click', () => runScript('beanbird.sh'));
-        document.getElementById('btn-reboot').addEventListener('click', () => runScript('reboot.sh'));
+        function triggerReboot() {
+            log("Rebooting TV...");
+            webOS.service.request("luna://org.webosbrew.hbchannel.service", {
+                method: "exec",
+                parameters: { "command": "reboot" }
+            });
+        }
 
-        // Handle Enter key for remote control
-        document.addEventListener('keydown', (e) => {
-            if (e.keyCode === 13 && document.activeElement.classList.contains('button')) {
+        // 2. Button Listeners
+        document.getElementById('btn-beanbird').addEventListener('click', executeBeanbird);
+        document.getElementById('btn-reboot').addEventListener('click', triggerReboot);
+
+        // 3. Remote Control Support (Enter Key)
+        document.addEventListener("keydown", function(e) {
+            if (e.keyCode === 13) {
                 document.activeElement.click();
             }
         });
 
-        window.onload = () => document.getElementById('btn-run').focus();
+        // Auto-focus first button
+        window.onload = () => document.getElementById('btn-beanbird').focus();
     </script>
 </body>
 </html>

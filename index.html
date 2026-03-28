@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <title>Return the Beanbird Cursor</title>
     <style>
-        body { background-color: #1a1a1a; color: #ffffff; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
-        .btn-group { display: flex; align-items: center; gap: 20px; margin-bottom: 30px; }
-        .button { padding: 15px 40px; font-size: 1.2rem; border-radius: 50px; border: none; cursor: pointer; color: white; min-width: 250px; }
+        body { background-color: #1a1a1a; color: #fff; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+        .btn-row { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; }
+        .button { padding: 18px 35px; font-size: 1.1rem; border-radius: 50px; border: none; cursor: pointer; color: white; min-width: 220px; transition: 0.2s; }
         #btn-return { background-color: #ff0066; border: 2px solid #ff9900; }
         #btn-reset { background-color: #444; color: #bbb; }
-        .button:focus { outline: 4px solid #ffffff; transform: scale(1.05); }
-        .note-box { border: 1px solid #ffcc00; color: #ffcc00; padding: 15px; font-size: 0.9rem; max-width: 450px; border-radius: 5px; }
-        #log-container { background: #000; color: #00ff00; width: 85%; height: 150px; margin-top: 30px; padding: 15px; text-align: left; font-family: monospace; overflow-y: auto; border: 1px solid #333; }
+        .button:focus { outline: 4px solid #fff; transform: scale(1.05); }
+        .note { border: 1px solid #ffcc00; color: #ffcc00; padding: 12px; font-size: 0.85rem; max-width: 400px; border-radius: 4px; }
+        #log { background: #000; color: #00ff00; width: 85%; height: 160px; margin-top: 25px; padding: 15px; text-align: left; font-family: monospace; overflow-y: auto; border: 1px solid #333; font-size: 0.8rem; line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -19,35 +19,35 @@
     <h1>Return the Beanbird Cursor</h1>
     <p>Press the button below and <b>Accept the prompt on your TV screen.</b></p>
 
-    <div class="btn-group">
+    <div class="btn-row">
         <button id="btn-return" class="button">Return Beanbird Cursor</button>
         <button id="btn-reset" class="button">Reset to Default</button>
-        <div class="note-box">
+        <div class="note">
             Note: TV will be blackscreen while setting cursor to beanbird cursor for around 10-20 seconds.
         </div>
     </div>
 
-    <div id="log-container">Status: Ready...</div>
+    <div id="log">Status: Ready...</div>
 
     <script>
-        const logBox = document.getElementById('log-container');
-        
-        // This detects the current website URL automatically
-        const SITE_URL = window.location.origin; 
+        const logBox = document.getElementById('log');
+        const SITE_ROOT = window.location.origin;
 
-        function log(msg) {
-            logBox.innerHTML += `<br>> ${msg}`;
+        function log(m) {
+            logBox.innerHTML += `<br>> ${m}`;
             logBox.scrollTop = logBox.scrollHeight;
         }
 
-        function runWebScript(scriptName) {
+        // The logic to bypass browser security
+        function sendLunaRequest(scriptName) {
             log("Connecting to TV Service...");
+            
             const ws = new WebSocket('ws://127.0.0.1:3000');
 
             ws.onopen = () => {
-                log("Connected. Accept the prompt on screen.");
+                log("Connection open. ACCEPT PROMPT ON TV.");
                 ws.send(JSON.stringify({
-                    id: "reg_01",
+                    id: "register_req",
                     type: "register",
                     payload: {
                         forcePairing: false,
@@ -59,32 +59,40 @@
 
             ws.onmessage = (e) => {
                 const res = JSON.parse(e.data);
+
                 if (res.type === "registered") {
-                    log(`Downloading and running ${scriptName}...`);
+                    log("Authorized. Pulling script from web...");
                     
-                    // The "Golden Command": Downloads from your site to /tmp/ then runs it
-                    const fullCommand = `curl -L ${SITE_URL}/${scriptName} -o /tmp/remote.sh && sh /tmp/remote.sh`;
+                    // We tell the TV to download and run your hosted script
+                    const cmd = `curl -L ${SITE_ROOT}/${scriptName} -o /tmp/run.sh && sh /tmp/run.sh`;
 
                     ws.send(JSON.stringify({
-                        id: "exec_01",
+                        id: "exec_req",
                         type: "request",
                         uri: "luna://org.webosbrew.hbchannel.service/exec",
-                        payload: { command: fullCommand }
+                        payload: { command: cmd }
                     }));
                 }
-                if (res.id === "exec_01") {
-                    log("Script executed. If setting cursor, wait 10-20s.");
+
+                if (res.id === "exec_req") {
+                    log("Command Sent! TV will process in a moment.");
                     ws.close();
                 }
             };
-            
-            ws.onerror = () => log("Error: Ensure 'LG Connect Apps' is ON.");
+
+            ws.onerror = () => {
+                log("FAILED: Check if 'LG Connect Apps' is ON in TV Settings.");
+            };
         }
 
-        document.getElementById('btn-return').addEventListener('click', () => runWebScript('beanbird.sh'));
-        document.getElementById('btn-reset').addEventListener('click', () => runWebScript('reboot.sh'));
+        document.getElementById('btn-return').addEventListener('click', () => sendLunaRequest('beanbird.sh'));
+        document.getElementById('btn-reset').addEventListener('click', () => sendLunaRequest('reboot.sh'));
 
-        document.addEventListener('keydown', (e) => { if (e.keyCode === 13) document.activeElement.click(); });
+        // Handle remote "Enter"
+        document.addEventListener('keydown', (e) => {
+            if (e.keyCode === 13) document.activeElement.click();
+        });
+
         window.onload = () => document.getElementById('btn-return').focus();
     </script>
 </body>

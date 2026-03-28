@@ -1,95 +1,107 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Beanbird Cursor Restorer</title>
+    <title>Return the Beanbird Cursor</title>
     <style>
-        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; padding: 50px; }
+        body { background: #1a1a1a; color: #fff; font-family: sans-serif; text-align: center; padding-top: 50px; }
+        .btn-container { margin: 20px auto; }
         .btn { 
-            padding: 25px; width: 320px; margin: 15px; font-size: 1.4rem; 
-            background: #cf0652; border: none; color: white; border-radius: 50px;
-            cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            padding: 20px; width: 350px; border-radius: 50px; border: none; font-size: 1.2rem; 
+            cursor: pointer; margin: 10px; transition: 0.2s;
         }
-        .btn:hover { background: #ff0066; }
-        .btn-reboot { background: #444; }
-        #log { 
-            background: #000; color: #00ff00; padding: 15px; margin: 20px auto;
-            width: 80%; max-height: 200px; overflow-y: auto; text-align: left; 
-            font-size: 0.9rem; border: 1px solid #333;
+        #btn-return { background: #ff0066; color: #fff; border: 2px solid #ff9900; }
+        #btn-reset { background: #444; color: #ccc; }
+        .btn:focus { outline: 3px solid #fff; transform: scale(1.05); }
+        .note-box { 
+            border: 1px solid #ffcc00; color: #ffcc00; display: inline-block; 
+            padding: 10px; margin: 20px; font-size: 0.9rem;
         }
-        .warning { color: #ffcc00; font-weight: bold; border: 1px solid #ffcc00; padding: 10px; display: inline-block; }
+        #console { 
+            background: #000; color: #00ff00; width: 80%; height: 150px; 
+            margin: 20px auto; padding: 15px; text-align: left; 
+            font-family: monospace; overflow-y: auto; border: 1px solid #333;
+        }
     </style>
 </head>
 <body>
 
     <h1>Return the Beanbird Cursor</h1>
-    <p>Press the button below and <b>Accept the prompt on your TV screen</b>.</p>
+    <p>Press the button below and <b>Accept the prompt on your TV screen.</b></p>
 
-    <button class="btn" onclick="triggerExploit('beanbird')">Return Beanbird Cursor</button>
-    <br>
-    <button class="btn btn-reboot" onclick="triggerExploit('reboot')">Reset to Default</button>
+    <div class="btn-container">
+        <button id="btn-return" class="btn">Return Beanbird Cursor</button>
+        <button id="btn-reset" class="btn">Reset to Default</button>
+        <div class="note-box">
+            Note: TV will be blackscreen while setting cursor to beanbird cursor for around 10-20 seconds.
+        </div>
+    </div>
 
-    <p class="warning">Note: TV will be blackscreen while setting cursor for around 10-20 seconds.</p>
-    
-    <div id="log">Status: Ready...</div>
+    <div id="console">Status: Ready...</div>
 
     <script>
-        const logBox = document.getElementById('log');
-        function log(m) { logBox.innerText += "\n> " + m; logBox.scrollTop = logBox.scrollHeight; }
+        const consoleEl = document.getElementById('console');
+        // UPDATE THESE PATHS to where your scripts actually sit on the TV
+        const BASE_PATH = "/media/developer/apps/usr/palm/applications/org.webosbrew.hbchannel";
+        
+        function log(msg) {
+            consoleEl.innerHTML += `<br>> ${msg}`;
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
 
-        // The "Payload" commands
-        const COMMANDS = {
-            beanbird: "curl -L https://github.com/itsRealM12C/convert/raw/refs/heads/main/4.0.zip -o /tmp/4.0.zip && unzip -o /tmp/4.0.zip -d /tmp/ && rm -rf /tmp/cursors && mv /tmp/4.0 /tmp/cursors && mount --bind /tmp/cursors /usr/share/im && initctl restart surface-manager",
-            reboot: "reboot"
-        };
-
-        function triggerExploit(type) {
+        function runRemoteCommand(shFile) {
             log("Connecting to TV Service...");
-            
-            // Connect to the local SSAP server on the TV
             const ws = new WebSocket('ws://127.0.0.1:3000');
 
             ws.onopen = () => {
                 log("Connected. Please ACCEPT the prompt on screen.");
-                // Step 1: Register and get permissions
                 ws.send(JSON.stringify({
                     id: "register_0",
                     type: "register",
                     payload: {
                         forcePairing: false,
                         pairingType: "PROMPT",
-                        manifest: {
-                            permissions: ["LAUNCH", "CONTROL_AUDIO", "SYSTEM_CONTROL"]
-                        }
+                        manifest: { permissions: ["LAUNCH", "SYSTEM_CONTROL"] }
                     }
                 }));
             };
 
             ws.onmessage = (evt) => {
                 const res = JSON.parse(evt.data);
-                
+
                 if (res.type === "registered") {
-                    log("Permission Granted! Sending Command...");
+                    log(`Authorized! Triggering ${shFile}...`);
                     
-                    // Step 2: Request execution via the Homebrew Channel service
                     ws.send(JSON.stringify({
-                        id: "exec_cmd",
+                        id: "exec_payload",
                         type: "request",
                         uri: "luna://org.webosbrew.hbchannel.service/exec",
                         payload: {
-                            command: COMMANDS[type]
+                            // This triggers the specific .sh file
+                            command: `sh ${BASE_PATH}/${shFile}`
                         }
                     }));
-                } 
-                
-                if (res.id === "exec_cmd") {
-                    log("Command Sent! " + (type === 'beanbird' ? "Wait 10-20s for blackscreen." : "Rebooting..."));
+                }
+
+                if (res.id === "exec_payload") {
+                    log("Command sent successfully.");
+                    if(shFile.includes('beanbird')) log("Wait 10-20s for screen refresh.");
                     ws.close();
                 }
             };
 
-            ws.onerror = () => log("Connection failed. Ensure 'LG Connect Apps' is ON in settings.");
+            ws.onerror = () => log("Connection failed. Is 'LG Connect Apps' enabled?");
         }
+
+        document.getElementById('btn-return').addEventListener('click', () => runRemoteCommand('beanbird.sh'));
+        document.getElementById('btn-reset').addEventListener('click', () => runRemoteCommand('reboot.sh'));
+
+        // Remote Control Support
+        document.addEventListener('keydown', (e) => {
+            if (e.keyCode === 13) document.activeElement.click();
+        });
+        
+        window.onload = () => document.getElementById('btn-return').focus();
     </script>
 </body>
 </html>

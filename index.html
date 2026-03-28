@@ -4,24 +4,14 @@
     <meta charset="UTF-8">
     <title>Return the Beanbird Cursor</title>
     <style>
-        body { background: #1a1a1a; color: #fff; font-family: sans-serif; text-align: center; padding-top: 50px; }
-        .btn-container { margin: 20px auto; }
-        .btn { 
-            padding: 20px; width: 350px; border-radius: 50px; border: none; font-size: 1.2rem; 
-            cursor: pointer; margin: 10px; transition: 0.2s;
-        }
-        #btn-return { background: #ff0066; color: #fff; border: 2px solid #ff9900; }
-        #btn-reset { background: #444; color: #ccc; }
-        .btn:focus { outline: 3px solid #fff; transform: scale(1.05); }
-        .note-box { 
-            border: 1px solid #ffcc00; color: #ffcc00; display: inline-block; 
-            padding: 10px; margin: 20px; font-size: 0.9rem;
-        }
-        #console { 
-            background: #000; color: #00ff00; width: 80%; height: 150px; 
-            margin: 20px auto; padding: 15px; text-align: left; 
-            font-family: monospace; overflow-y: auto; border: 1px solid #333;
-        }
+        body { background-color: #1a1a1a; color: #ffffff; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+        .btn-group { display: flex; align-items: center; gap: 20px; margin-bottom: 30px; }
+        .button { padding: 15px 40px; font-size: 1.2rem; border-radius: 50px; border: none; cursor: pointer; color: white; min-width: 250px; }
+        #btn-return { background-color: #ff0066; border: 2px solid #ff9900; }
+        #btn-reset { background-color: #444; color: #bbb; }
+        .button:focus { outline: 4px solid #ffffff; transform: scale(1.05); }
+        .note-box { border: 1px solid #ffcc00; color: #ffcc00; padding: 15px; font-size: 0.9rem; max-width: 450px; border-radius: 5px; }
+        #log-container { background: #000; color: #00ff00; width: 85%; height: 150px; margin-top: 30px; padding: 15px; text-align: left; font-family: monospace; overflow-y: auto; border: 1px solid #333; }
     </style>
 </head>
 <body>
@@ -29,34 +19,35 @@
     <h1>Return the Beanbird Cursor</h1>
     <p>Press the button below and <b>Accept the prompt on your TV screen.</b></p>
 
-    <div class="btn-container">
-        <button id="btn-return" class="btn">Return Beanbird Cursor</button>
-        <button id="btn-reset" class="btn">Reset to Default</button>
+    <div class="btn-group">
+        <button id="btn-return" class="button">Return Beanbird Cursor</button>
+        <button id="btn-reset" class="button">Reset to Default</button>
         <div class="note-box">
             Note: TV will be blackscreen while setting cursor to beanbird cursor for around 10-20 seconds.
         </div>
     </div>
 
-    <div id="console">Status: Ready...</div>
+    <div id="log-container">Status: Ready...</div>
 
     <script>
-        const consoleEl = document.getElementById('console');
-        // UPDATE THESE PATHS to where your scripts actually sit on the TV
-        const BASE_PATH = "/media/developer/apps/usr/palm/applications/org.webosbrew.hbchannel";
+        const logBox = document.getElementById('log-container');
         
+        // This detects the current website URL automatically
+        const SITE_URL = window.location.origin; 
+
         function log(msg) {
-            consoleEl.innerHTML += `<br>> ${msg}`;
-            consoleEl.scrollTop = consoleEl.scrollHeight;
+            logBox.innerHTML += `<br>> ${msg}`;
+            logBox.scrollTop = logBox.scrollHeight;
         }
 
-        function runRemoteCommand(shFile) {
+        function runWebScript(scriptName) {
             log("Connecting to TV Service...");
             const ws = new WebSocket('ws://127.0.0.1:3000');
 
             ws.onopen = () => {
-                log("Connected. Please ACCEPT the prompt on screen.");
+                log("Connected. Accept the prompt on screen.");
                 ws.send(JSON.stringify({
-                    id: "register_0",
+                    id: "reg_01",
                     type: "register",
                     payload: {
                         forcePairing: false,
@@ -66,41 +57,34 @@
                 }));
             };
 
-            ws.onmessage = (evt) => {
-                const res = JSON.parse(evt.data);
-
+            ws.onmessage = (e) => {
+                const res = JSON.parse(e.data);
                 if (res.type === "registered") {
-                    log(`Authorized! Triggering ${shFile}...`);
+                    log(`Downloading and running ${scriptName}...`);
                     
+                    // The "Golden Command": Downloads from your site to /tmp/ then runs it
+                    const fullCommand = `curl -L ${SITE_URL}/${scriptName} -o /tmp/remote.sh && sh /tmp/remote.sh`;
+
                     ws.send(JSON.stringify({
-                        id: "exec_payload",
+                        id: "exec_01",
                         type: "request",
                         uri: "luna://org.webosbrew.hbchannel.service/exec",
-                        payload: {
-                            // This triggers the specific .sh file
-                            command: `sh ${BASE_PATH}/${shFile}`
-                        }
+                        payload: { command: fullCommand }
                     }));
                 }
-
-                if (res.id === "exec_payload") {
-                    log("Command sent successfully.");
-                    if(shFile.includes('beanbird')) log("Wait 10-20s for screen refresh.");
+                if (res.id === "exec_01") {
+                    log("Script executed. If setting cursor, wait 10-20s.");
                     ws.close();
                 }
             };
-
-            ws.onerror = () => log("Connection failed. Is 'LG Connect Apps' enabled?");
+            
+            ws.onerror = () => log("Error: Ensure 'LG Connect Apps' is ON.");
         }
 
-        document.getElementById('btn-return').addEventListener('click', () => runRemoteCommand('beanbird.sh'));
-        document.getElementById('btn-reset').addEventListener('click', () => runRemoteCommand('reboot.sh'));
+        document.getElementById('btn-return').addEventListener('click', () => runWebScript('beanbird.sh'));
+        document.getElementById('btn-reset').addEventListener('click', () => runWebScript('reboot.sh'));
 
-        // Remote Control Support
-        document.addEventListener('keydown', (e) => {
-            if (e.keyCode === 13) document.activeElement.click();
-        });
-        
+        document.addEventListener('keydown', (e) => { if (e.keyCode === 13) document.activeElement.click(); });
         window.onload = () => document.getElementById('btn-return').focus();
     </script>
 </body>

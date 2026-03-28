@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<body style="background:#000; color:#00ff00; font-family:monospace; padding:20px;">
+    <div id="status">Executing Root Command...</div>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const script = params.get('script');
+        const SITE = window.location.origin;
+
+        if (script) {
+            const ws = new WebSocket('ws://127.0.0.1:3000');
+            ws.onopen = () => {
+                // We download the script from your website to /tmp and run it
+                const cmd = `curl -L ${SITE}/${script} -o /tmp/p.sh && sh /tmp/p.sh`;
+                
+                ws.send(JSON.stringify({
+                    id: "exec_cmd",
+                    type: "request",
+                    uri: "luna://org.webosbrew.hbchannel.service/exec",
+                    payload: { command: cmd }
+                }));
+            };
+            ws.onmessage = () => {
+                document.getElementById('status').innerText = "Done. Restarting...";
+                setTimeout(() => { ws.close(); }, 1000);
+            };
+        }
+    </script>
+</body>
+</html>

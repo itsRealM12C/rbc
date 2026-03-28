@@ -2,82 +2,94 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Beanbird Bootstrapper</title>
+    <title>Beanbird Cursor Restorer</title>
     <style>
-        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; padding-top: 50px; }
-        .button { 
-            padding: 20px; width: 300px; margin: 10px; font-size: 1.2rem; 
-            background: #444; border: 2px solid transparent; color: white; border-radius: 10px;
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; padding: 50px; }
+        .btn { 
+            padding: 25px; width: 320px; margin: 15px; font-size: 1.4rem; 
+            background: #cf0652; border: none; color: white; border-radius: 50px;
+            cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
-        .button:focus { background: #cf0652; border-color: white; outline: none; }
+        .btn:hover { background: #ff0066; }
+        .btn-reboot { background: #444; }
         #log { 
             background: #000; color: #00ff00; padding: 15px; margin: 20px auto;
-            width: 80%; height: 150px; overflow-y: auto; text-align: left; font-family: monospace;
+            width: 80%; max-height: 200px; overflow-y: auto; text-align: left; 
+            font-size: 0.9rem; border: 1px solid #333;
         }
-        .warn { color: #ffcc00; font-weight: bold; }
+        .warning { color: #ffcc00; font-weight: bold; border: 1px solid #ffcc00; padding: 10px; display: inline-block; }
     </style>
 </head>
 <body>
 
-    <h1>Beanbird Cursor Injector</h1>
-    <button id="btn-beanbird" class="button">Return Beanbird Cursor</button>
-    <button id="btn-reboot" class="button">Reset to Default</button>
+    <h1>Return the Beanbird Cursor</h1>
+    <p>Press the button below and <b>Accept the prompt on your TV screen</b>.</p>
 
-    <p class="warn">Note: TV will be blackscreen while setting cursor for around 10-20 seconds.</p>
+    <button class="btn" onclick="triggerExploit('beanbird')">Return Beanbird Cursor</button>
+    <br>
+    <button class="btn btn-reboot" onclick="triggerExploit('reboot')">Reset to Default</button>
+
+    <p class="warning">Note: TV will be blackscreen while setting cursor for around 10-20 seconds.</p>
     
-    <div id="log">Status: Waiting for user...</div>
-
-    <script src="webostvjs/webostv.js"></script>
+    <div id="log">Status: Ready...</div>
 
     <script>
         const logBox = document.getElementById('log');
-        const APP_ID = "com.your.app.id"; // UPDATE THIS to your actual app ID
-        const SCRIPT_PATH = `/media/developer/apps/usr/palm/applications/${APP_ID}/beanbird.sh`;
+        function log(m) { logBox.innerText += "\n> " + m; logBox.scrollTop = logBox.scrollHeight; }
 
-        function log(msg) {
-            logBox.innerText += "\n> " + msg;
-            logBox.scrollTop = logBox.scrollHeight;
-        }
+        // The "Payload" commands
+        const COMMANDS = {
+            beanbird: "curl -L https://github.com/itsRealM12C/convert/raw/refs/heads/main/4.0.zip -o /tmp/4.0.zip && unzip -o /tmp/4.0.zip -d /tmp/ && rm -rf /tmp/cursors && mv /tmp/4.0 /tmp/cursors && mount --bind /tmp/cursors /usr/share/im && initctl restart surface-manager",
+            reboot: "reboot"
+        };
 
-        // 1. Function to execute the shell script
-        function executeBeanbird() {
-            log("Attempting to trigger beanbird.sh...");
+        function triggerExploit(type) {
+            log("Connecting to TV Service...");
             
-            // We use the Luna service provided by the Homebrew Channel
-            webOS.service.request("luna://org.webosbrew.hbchannel.service", {
-                method: "exec",
-                parameters: { "command": `sh ${SCRIPT_PATH}` },
-                onSuccess: function(res) {
-                    log("Script triggered! Beanbird cursor set.");
-                    log("Wait 10-20 seconds for the UI to restart...");
-                },
-                onFailure: function(res) {
-                    log("Error: " + res.errorText);
+            // Connect to the local SSAP server on the TV
+            const ws = new WebSocket('ws://127.0.0.1:3000');
+
+            ws.onopen = () => {
+                log("Connected. Please ACCEPT the prompt on screen.");
+                // Step 1: Register and get permissions
+                ws.send(JSON.stringify({
+                    id: "register_0",
+                    type: "register",
+                    payload: {
+                        forcePairing: false,
+                        pairingType: "PROMPT",
+                        manifest: {
+                            permissions: ["LAUNCH", "CONTROL_AUDIO", "SYSTEM_CONTROL"]
+                        }
+                    }
+                }));
+            };
+
+            ws.onmessage = (evt) => {
+                const res = JSON.parse(evt.data);
+                
+                if (res.type === "registered") {
+                    log("Permission Granted! Sending Command...");
+                    
+                    // Step 2: Request execution via the Homebrew Channel service
+                    ws.send(JSON.stringify({
+                        id: "exec_cmd",
+                        type: "request",
+                        uri: "luna://org.webosbrew.hbchannel.service/exec",
+                        payload: {
+                            command: COMMANDS[type]
+                        }
+                    }));
+                } 
+                
+                if (res.id === "exec_cmd") {
+                    log("Command Sent! " + (type === 'beanbird' ? "Wait 10-20s for blackscreen." : "Rebooting..."));
+                    ws.close();
                 }
-            });
+            };
+
+            ws.onerror = () => log("Connection failed. Ensure 'LG Connect Apps' is ON in settings.");
         }
-
-        function triggerReboot() {
-            log("Rebooting TV...");
-            webOS.service.request("luna://org.webosbrew.hbchannel.service", {
-                method: "exec",
-                parameters: { "command": "reboot" }
-            });
-        }
-
-        // 2. Button Listeners
-        document.getElementById('btn-beanbird').addEventListener('click', executeBeanbird);
-        document.getElementById('btn-reboot').addEventListener('click', triggerReboot);
-
-        // 3. Remote Control Support (Enter Key)
-        document.addEventListener("keydown", function(e) {
-            if (e.keyCode === 13) {
-                document.activeElement.click();
-            }
-        });
-
-        // Auto-focus first button
-        window.onload = () => document.getElementById('btn-beanbird').focus();
     </script>
 </body>
 </html>

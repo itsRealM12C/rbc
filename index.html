@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Beanbird Cursor Tool</title>
+    <script src="webostvjs/webostv.js"></script>
+    <style>
+        body { background: #1a1a1a; color: white; text-align: center; padding-top: 10%; font-family: sans-serif; }
+        .button { 
+            padding: 20px; width: 350px; margin: 10px; font-size: 1.5rem; 
+            background: #444; border: none; color: white; border-radius: 10px;
+        }
+        .button:focus { background: #cf0652; outline: 3px solid white; }
+        .warn { color: #ffcc00; font-weight: bold; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <h1>Beanbird Cursor Manager</h1>
+    
+    <button id="btn-run" class="button">Return Beanbird Cursor</button>
+    <button id="btn-reboot" class="button">Reset to Default</button>
+
+    <p class="warn">Note: TV will be blackscreen while setting cursor to beanbird cursor for around 10 seconds.</p>
+    <div id="status">Status: Ready</div>
+
+    <script>
+        const status = document.getElementById('status');
+        // Update this path to where your scripts are stored on the TV
+        const scriptPath = "/media/developer/apps/usr/palm/applications/com.your.app.id";
+
+        function runScript(fileName) {
+            status.innerText = "Status: Running " + fileName + "...";
+            
+            // Using the Homebrew Channel service to execute the shell file
+            webOS.service.request("luna://org.webosbrew.hbchannel.service", {
+                method: "exec",
+                parameters: { "command": "sh " + scriptPath + "/" + fileName },
+                onSuccess: (res) => { status.innerText = "Status: Success"; },
+                onFailure: (res) => { status.innerText = "Status: Failed - " + res.errorText; }
+            });
+        }
+
+        document.getElementById('btn-run').addEventListener('click', () => runScript('beanbird.sh'));
+        document.getElementById('btn-reboot').addEventListener('click', () => runScript('reboot.sh'));
+
+        // Handle Enter key for remote control
+        document.addEventListener('keydown', (e) => {
+            if (e.keyCode === 13 && document.activeElement.classList.contains('button')) {
+                document.activeElement.click();
+            }
+        });
+
+        window.onload = () => document.getElementById('btn-run').focus();
+    </script>
+</body>
+</html>

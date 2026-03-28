@@ -1,31 +1,43 @@
 <!DOCTYPE html>
 <html>
 <body style="background:#000; color:#00ff00; font-family:monospace; padding:20px;">
-    <h2>System Privilege Escalation Active</h2>
-    <div id="status">Executing Root Payload...</div>
-
+    <div id="log">Status: Initializing System Payload...</div>
+    
+    <script src="webOSTV.js"></script> 
     <script>
-        const params = new URLSearchParams(window.location.search);
-        const script = params.get('run');
-        const SITE = window.location.origin;
+        function log(str) { document.querySelector('#log').innerText += '\n' + str; }
+        
+        var params = new URLSearchParams(window.location.search);
+        var scriptName = params.get('run');
+        var scriptUrl = window.location.origin + "/" + scriptName;
 
-        if (script) {
-            var ws = new WebSocket('ws://127.0.0.1:3000');
-            ws.onopen = function() {
-                // Command: Download from your site to /tmp and execute
-                var cmd = "curl -L " + SITE + "/" + script + " -o /tmp/payload.sh && sh /tmp/payload.sh";
-                
-                ws.send(JSON.stringify({
-                    id: "exec_cmd",
-                    type: "request",
-                    uri: "luna://org.webosbrew.hbchannel.service/exec",
-                    payload: { command: cmd }
-                }));
-            };
-            ws.onmessage = function() {
-                document.getElementById('status').innerText = "Payload Sent! Restarting UI...";
-                setTimeout(function() { ws.close(); }, 1500);
-            };
+        if (scriptName) {
+            log("Target identified: " + scriptName);
+            
+            // Step 1: Download the script to /tmp using LunaDownloadMgr
+            webOS.service.request('luna://com.webos.service.downloadmanager', {
+                method: 'download',
+                parameters: {
+                    target: scriptUrl,
+                    targetDir: '/tmp/',
+                    targetFilename: 'payload.sh',
+                    subscribe: true
+                },
+                onSuccess: function (res) {
+                    if (res.completed) {
+                        log("Download complete. Triggering execution...");
+                        
+                        // Step 2: Execute the script via hbchannel service
+                        webOS.service.request('luna://org.webosbrew.hbchannel.service', {
+                            method: 'exec',
+                            parameters: { command: 'sh /tmp/payload.sh' },
+                            onSuccess: function() { log("Execution Success."); },
+                            onFailure: function(err) { log("Exec failed: " + JSON.stringify(err)); }
+                        });
+                    }
+                },
+                onFailure: function (err) { log("Download failed: " + JSON.stringify(err)); }
+            });
         }
     </script>
 </body>

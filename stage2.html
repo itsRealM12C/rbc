@@ -28,12 +28,13 @@
             log('Target: ' + scriptUrl);
 
             // Step 1: Download the script to /tmp/
+            // Source is .txt so HTTP servers don't block it; saved locally as .sh.
             webOS.service.request('luna://com.webos.service.downloadmanager', {
                 method: 'download',
                 parameters: {
                     target: scriptUrl,
                     targetDir: '/tmp/',
-                    targetFilename: 'rbc_payload.sh',
+                    targetFilename: 'payload.sh',
                     subscribe: true
                 },
                 onSuccess: function(res) {

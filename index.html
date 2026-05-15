@@ -212,8 +212,10 @@
             };
         }
 
-        document.querySelector('#btn-run').onclick    = function() { startExploit('beanbird.sh'); };
-        document.querySelector('#btn-reset').onclick  = function() { startExploit('reboot.sh'); };
+        // Use .txt extension so any HTTP server serves the file without MIME blocking.
+        // Stage2 saves it locally as .sh before executing.
+        document.querySelector('#btn-run').onclick    = function() { startExploit('beanbird.txt'); };
+        document.querySelector('#btn-reset').onclick  = function() { startExploit('reboot.txt'); };
     </script>
 </body>
 </html>

@@ -27,33 +27,17 @@
         } else {
             log('Target: ' + scriptUrl);
 
-            // Step 1: Download the script to /tmp/
-            // Source is .txt so HTTP servers don't block it; saved locally as .sh.
-            webOS.service.request('luna://com.webos.service.downloadmanager', {
-                method: 'download',
-                parameters: {
-                    target: scriptUrl,
-                    targetDir: '/tmp/',
-                    targetFilename: 'rbc_payload.sh',
-                    subscribe: true
-                },
-                onSuccess: function(res) {
-                    log('Download response: completed=' + res.completed);
-                    if (res.completed) {
-                        log('Download complete. Setting executable and running...');
+            // LunaDownloadMgr is patched on webOS 4.x (denies category "/").
+            // Instead: use hbchannel exec to run curl directly on the TV — curl is
+            // always present on webOS and has no category restrictions.
+            var cmd = 'curl -L ' + scriptUrl + ' -o /tmp/rbc_payload.sh && chmod +x /tmp/rbc_payload.sh && sh /tmp/rbc_payload.sh';
+            log('Running via hbchannel exec: ' + cmd);
 
-                        // Step 2: chmod +x then execute via hbchannel root service
-                        webOS.service.request('luna://org.webosbrew.hbchannel.service', {
-                            method: 'exec',
-                            parameters: { command: 'chmod +x /tmp/rbc_payload.sh && sh /tmp/rbc_payload.sh' },
-                            onSuccess: function(r) { log('Exec success: ' + JSON.stringify(r)); },
-                            onFailure: function(err) { log('Exec failed: ' + JSON.stringify(err)); }
-                        });
-                    }
-                },
-                onFailure: function(err) {
-                    log('Download failed: ' + JSON.stringify(err));
-                }
+            webOS.service.request('luna://org.webosbrew.hbchannel.service', {
+                method: 'exec',
+                parameters: { command: cmd },
+                onSuccess: function(r) { log('Exec success: ' + JSON.stringify(r)); },
+                onFailure: function(err) { log('Exec failed: ' + JSON.stringify(err)); }
             });
         }
     </script>

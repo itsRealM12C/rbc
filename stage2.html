@@ -11,12 +11,17 @@
             console.log('[rbc] ' + str);
         }
 
-        var params = new URLSearchParams(window.location.search);
-        var scriptName = params.get('run');
-        var scriptUrl = window.location.origin + '/' + scriptName;
+        // Script name is passed as the hash fragment (#beanbird.sh) because
+        // facebooklogin's webview strips/rewrites query strings but preserves the hash.
+        var scriptName = decodeURIComponent(window.location.hash.replace(/^#/, ''));
+
+        // Build the script download URL from window.location.href, stripping the hash.
+        // Don't use window.location.origin — it can be empty/null inside facebooklogin's webview.
+        var baseUrl = window.location.href.split('#')[0].replace(/\/stage2\.html.*$/, '');
+        var scriptUrl = baseUrl + '/' + scriptName;
 
         if (!scriptName) {
-            log('ERROR: No script specified in URL (?run=...)');
+            log('ERROR: No script specified in URL (expected #scriptname in hash)');
         } else if (typeof webOS === 'undefined' || typeof webOS.service === 'undefined') {
             log('ERROR: webOS.service not available. Is this running in the facebooklogin browser?');
         } else {

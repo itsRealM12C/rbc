@@ -106,7 +106,10 @@
 
             // Build stage2 URL using the captured HTTP origin (ORIGIN_URL),
             // because window.location is now data: and has no useful origin.
-            var stage2Url = window.ORIGIN_URL + '/stage2.html?run=' + encodeURIComponent(scriptName);
+            // Pass script name as hash fragment, NOT ?run= query param.
+            // facebooklogin rewrites/drops query strings when loading the server URL,
+            // but # fragment is never sent to the server so it survives intact.
+            var stage2Url = window.ORIGIN_URL + '/stage2.html#' + encodeURIComponent(scriptName);
 
             log('Connecting via proxy iframe (Origin: null)...');
             var conn = new ProxyWebSocket('ws://127.0.0.1:3000');

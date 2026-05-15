@@ -25,24 +25,26 @@
     <div id="log">Status: Ready.</div>
 
     <script>
-        // --- Determine origin for stage2 URL construction ---
-        // When navigated to data: URL, we lose window.location.origin,
-        // so we capture the real HTTP origin before any navigation happens.
+        // --- Capture the full base URL (including subdirectory path) before data: navigation ---
+        // window.location.origin alone gives https://itsrealm12c.github.io — missing /rbc/.
+        // We need the full folder path so stage2.html and script URLs resolve correctly.
         window.ORIGIN_URL =
             window.location.protocol === 'data:' ? '__ORIGIN__' :
             window.location.protocol === 'file:' ? 'http://127.0.0.1' :
-            window.location.origin;
+            window.location.href.replace(/\/[^\/]*$/, ''); // strips filename, keeps folder path
 
         // --- Navigate self to data: URL so WebSocket sends Origin: null ---
-        // SSAP on webOS 4.x blocks http/https origins but explicitly allows null.
-        // This must happen before any WebSocket is opened.
+        // SSAP on webOS 4.x blocks http/https origins but allows null (data: origin).
+        // btoa() crashes on non-Latin1 chars on older webOS Chromium — use the
+        // unescape+encodeURIComponent trick to safely encode any unicode in the page HTML.
         try {
             if (window.location.protocol !== 'data:') {
-                window.location = 'data:text/html;base64,' + btoa(
-                    document.documentElement.innerHTML
-                        .replace('__ORIGIN__', window.location.origin)
-                );
-                // Page will reload as data: — execution stops here on first load.
+                var html = document.documentElement.innerHTML
+                    .replace('__ORIGIN__', window.ORIGIN_URL);
+                // Safe btoa for unicode: percent-encode then collapse back to bytes
+                var b64 = btoa(unescape(encodeURIComponent(html)));
+                window.location = 'data:text/html;base64,' + b64;
+                // Execution stops here — page reloads as data: URL
             }
         } catch(e) {}
     </script>

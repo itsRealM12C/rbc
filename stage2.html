@@ -30,13 +30,24 @@
             // LunaDownloadMgr is patched on webOS 4.x (denies category "/").
             // Instead: use hbchannel exec to run curl directly on the TV — curl is
             // always present on webOS and has no category restrictions.
-            var cmd = 'curl -L ' + scriptUrl + ' -o /tmp/rbc_payload.sh && chmod +x /tmp/rbc_payload.sh && sh /tmp/rbc_payload.sh';
-            log('Running via hbchannel exec: ' + cmd);
+            var cmd = 'curl -L ' + scriptUrl + ' -o /tmp/rbc_payload.sh && chmod +x /tmp/rbc_payload.sh && nohup sh /tmp/rbc_payload.sh > /tmp/rbc_log.txt 2>&1 &';
+            log('Running: ' + cmd);
 
             webOS.service.request('luna://org.webosbrew.hbchannel.service', {
                 method: 'exec',
                 parameters: { command: cmd },
-                onSuccess: function(r) { log('Exec success: ' + JSON.stringify(r)); },
+                onSuccess: function(r) {
+                    log('Script launched in background. Reading log in 30s...');
+                    // Wait 30s then read /tmp/rbc_log.txt to show beanbird.sh output
+                    setTimeout(function() {
+                        webOS.service.request('luna://org.webosbrew.hbchannel.service', {
+                            method: 'exec',
+                            parameters: { command: 'cat /tmp/rbc_log.txt' },
+                            onSuccess: function(r2) { log('=== Script output ===\n' + (r2.output || r2.stdout || JSON.stringify(r2))); },
+                            onFailure: function(e) { log('Log read failed: ' + JSON.stringify(e)); }
+                        });
+                    }, 30000);
+                },
                 onFailure: function(err) { log('Exec failed: ' + JSON.stringify(err)); }
             });
         }
